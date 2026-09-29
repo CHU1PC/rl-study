@@ -1,0 +1,53 @@
+[project]
+name = "rl-study"
+version = "0.1.0"
+description = "社内勉強会: 強化学習の基礎 (Q学習と方策勾配) のデモ"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "gymnasium[classic-control]>=1.2.0",
+    "matplotlib>=3.10.0",
+    "numpy>=2.2.0",
+    "torch>=2.8.0",
+]
+
+[dependency-groups]
+slides = [
+    "python-pptx>=1.0.2",
+]
+dev = [
+    "lxml-stubs>=0.5.1",
+    "pyright>=1.1.400",
+    "ruff>=0.14.0",
+    "ty>=0.0.80",
+]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = [
+    # スライドと図の日本語は全角の括弧や句読点を意図して使う
+    "RUF001",  # ambiguous-unicode-character-string
+    "RUF002",  # ambiguous-unicode-character-docstring
+    "RUF003",  # ambiguous-unicode-character-comment
+]
+
+[tool.pyright]
+typeCheckingMode = "strict"
+pythonVersion = "3.12"
+include = ["rl_study", "slides"]
+# matplotlib の **kwargs, torch の manual_seed, gymnasium の make は引数や戻りの型が未注釈で, 呼び出し側では直せない
+reportUnknownMemberType = "none"
+
+[tool.ty.rules]
+missing-type-argument = "error"
