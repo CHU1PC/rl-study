@@ -5,4 +5,5 @@ __pycache__/
 slides/_render/
 slides/_backup/
 .ruff_cache/
+runs/
 強化学習入門.pptx
