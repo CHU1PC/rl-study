@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Final
 
@@ -75,7 +76,9 @@ def returns_to_go(rewards: list[float], gamma: float) -> list[float]:
     return out[::-1]
 
 
-def update(policy: Policy, optimizer: torch.optim.Optimizer, rollouts: list[Rollout], gamma: float) -> float:
+def update(
+    policy: Policy, optimizer: torch.optim.Optimizer, rollouts: list[Rollout], gamma: float, *, baseline: bool = True
+) -> float:
     """REINFORCE で方策を 1 回更新する.
 
     Args:
@@ -83,6 +86,7 @@ def update(policy: Policy, optimizer: torch.optim.Optimizer, rollouts: list[Roll
         optimizer: 方策の最適化器.
         rollouts: 今の方策で集めたエピソード.
         gamma: 割引率.
+        baseline: False なら平均を引かず, G をそのまま重みにする.
 
     Returns:
         損失の値.
@@ -94,6 +98,9 @@ def update(policy: Policy, optimizer: torch.optim.Optimizer, rollouts: list[Roll
     logits = policy(obs)
     # ベースライン: バッチ内の平均より良かった行動は増やし, 悪かった行動は減らす.
     advantages = (returns - returns.mean()) / (returns.std() + 1e-8)
+    if not baseline:
+        # G は常に正なので, どの行動も押し上げる. G が大きかった行動ほど強く押し上げるだけ.
+        advantages = returns
     # 自分が選んだ行動を正解ラベルにした -log π(a|s). これを良さ A で重み付けする.
     ce = F.cross_entropy(logits, actions, reduction="none")
     loss = (ce * advantages).mean()
@@ -111,9 +118,17 @@ class TrainResult:
 
 
 def train(
-    *, updates: int, batch_episodes: int = 8, lr: float = 1e-2, gamma: float = 0.99, seed: int = 0
+    *,
+    updates: int,
+    batch_episodes: int = 8,
+    lr: float = 1e-2,
+    gamma: float = 0.99,
+    seed: int = 0,
+    baseline: bool = True,
+    until_solved: bool = True,
+    on_update: Callable[[list[float]], None] | None = None,
 ) -> TrainResult:
-    """直近平均が SOLVED に届くか updates 回に達するまで REINFORCE を回す.
+    """updates 回に達するまで REINFORCE を回す. until_solved なら直近平均が SOLVED に届いた時点で止める.
 
     Args:
         updates: 更新回数の上限.
@@ -121,6 +136,9 @@ def train(
         lr: 学習率.
         gamma: 割引率.
         seed: 乱数の種.
+        baseline: False なら平均を引かずに更新する.
+        until_solved: True なら SOLVED に届いた時点で止める.
+        on_update: 更新のたびに, ここまでのステップ数の列を渡して呼ぶ.
 
     Returns:
         学習した方策と, エピソードごとの倒れるまでのステップ数.
@@ -134,10 +152,12 @@ def train(
     for u in range(1, updates + 1):
         rollouts = [run_episode(env, policy) for _ in range(batch_episodes)]
         episode_steps.extend(sum(r.rewards) for r in rollouts)
-        update(policy, optimizer, rollouts, gamma)
+        update(policy, optimizer, rollouts, gamma, baseline=baseline)
         recent = float(np.mean(episode_steps[-RECENT:]))
         print(f"update {u:3d}  episodes {len(episode_steps):4d}  直近{RECENT}回の平均 {recent:5.1f}", flush=True)
-        if recent >= SOLVED:
+        if on_update is not None:
+            on_update(episode_steps)
+        if until_solved and recent >= SOLVED:
             break
     env.close()
     return TrainResult(policy, episode_steps)
