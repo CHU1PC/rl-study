@@ -1,5 +1,6 @@
 import argparse
 import json
+import sys
 import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
@@ -11,6 +12,7 @@ import numpy as np
 import numpy.typing as npt
 import torch
 from matplotlib.axes import Axes
+from matplotlib.backends.registry import BackendFilter, backend_registry
 
 from rl_study.cartpole.record import MAX_STEPS, watch
 from rl_study.cartpole.train import RECENT, train
@@ -56,7 +58,14 @@ def load_runs() -> list[Run]:
     Returns:
         過去の実行.
     """
-    return [Run(**json.loads(p.read_text(encoding="utf-8"))) for p in sorted(RUNS.glob("*.json"))]
+    runs: list[Run] = []
+    for path in sorted(RUNS.glob("*.json")):
+        try:
+            runs.append(Run(**json.loads(path.read_text(encoding="utf-8"))))
+        except (ValueError, TypeError) as e:
+            # 書き込み中に止めたファイルなどで, ハンズオン全体を止めない.
+            print(f"{path} を読めないので飛ばします（{e}）", file=sys.stderr)
+    return runs
 
 
 def save_run(run: Run) -> Path:
@@ -109,6 +118,15 @@ def draw_axes(ax: Axes, previous: list[Run], episodes: int) -> None:
     ax.spines[["top", "right"]].set_visible(False)
 
 
+def has_window() -> bool:
+    """matplotlib がウィンドウを出せる描画方式かを返す.
+
+    Returns:
+        ウィンドウを出せるなら True.
+    """
+    return plt.get_backend().lower() not in backend_registry.list_builtin(BackendFilter.NON_INTERACTIVE)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="CartPole の方策勾配法を, 設定を変えて学習させて比べる")
     parser.add_argument("--lr", type=float, default=1e-2, help="学習率")
@@ -132,6 +150,12 @@ def main() -> None:
         parser.error("--gamma は 0 から 1 の間にしてください")
     if not 1 <= batch <= episodes:
         parser.error("--batch は 1 以上, --episodes 以下にしてください")
+    if seed < 0:
+        parser.error("--seed は 0 以上にしてください")
+    updates = episodes // batch
+    if updates * batch != episodes:
+        print(f"--episodes {episodes} は --batch {batch} で割り切れないので, {updates * batch} エピソードで学習します.")
+        episodes = updates * batch
 
     # 小さな MLP では, スレッドを増やすと同期の待ちで逆に遅くなる.
     torch.set_num_threads(1)
@@ -139,16 +163,20 @@ def main() -> None:
     if clear:
         for path in RUNS.glob("*.json"):
             path.unlink()
+    window = has_window()
+    if not window:
+        print("学習曲線のウィンドウを出せない環境なので, 最後に PNG に保存します.", file=sys.stderr)
     previous = load_runs()[-SHOW_PREVIOUS:]
     label = make_label(lr=lr, gamma=gamma, batch=batch, baseline=baseline)
 
     plt.ion()
-    _fig, ax = plt.subplots(figsize=(13, 5.4), layout="constrained")
+    fig, ax = plt.subplots(figsize=(13, 5.4), layout="constrained")
     draw_axes(ax, previous, episodes)
     (raw,) = ax.plot([], [], color=ACCENT, lw=0.8, alpha=0.3)
     (line,) = ax.plot([], [], color=ACCENT, lw=2.8, label=f"{label}（今回）")
     ax.legend(frameon=False, loc="upper left", bbox_to_anchor=(1.01, 1.0), fontsize=11)
-    plt.pause(0.01)
+    if window:
+        plt.pause(0.01)
 
     last_draw = 0.0
 
@@ -159,11 +187,12 @@ def main() -> None:
         raw.set_data(np.arange(1, len(steps) + 1), steps)
         curve = moving_average(steps)
         line.set_data(curve.x, curve.y)
-        plt.pause(0.001)
+        if window:
+            plt.pause(0.001)
         last_draw = time.monotonic()
 
     result = train(
-        updates=episodes // batch,
+        updates=updates,
         batch_episodes=batch,
         lr=lr,
         gamma=gamma,
@@ -177,10 +206,16 @@ def main() -> None:
     recent = float(np.mean(result.episode_steps[-RECENT:]))
     print(f"\n{label}: 最後の{RECENT}回の平均 {recent:.1f} ステップ（{path} に保存）")
 
-    print("学習後の方策で棒を動かします. 終わったら学習曲線のウィンドウを閉じてください.")
+    if not window:
+        png = path.with_suffix(".png")
+        fig.savefig(png, dpi=100)
+        print(f"学習曲線を {png} に保存しました.")
+    print("学習後の方策で棒を動かします.")
     watch(result.policy, seed=seed)
-    plt.ioff()
-    plt.show()
+    if window:
+        print("学習曲線のウィンドウを閉じると終わります.")
+        plt.ioff()
+        plt.show()
 
 
 if __name__ == "__main__":
