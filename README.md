@@ -24,15 +24,25 @@ rl_study/cartpole/
 ├── __main__.py   入口（python -m rl_study.cartpole で動く）
 ├── policy.py     方策の MLP（4→64→2）
 ├── train.py      環境の作成、1エピソードの実行、REINFORCE の更新と学習ループ
-└── record.py     GIF の録画、学習曲線、ウィンドウでの再生
+├── record.py     GIF の録画、学習曲線、ウィンドウでの再生
+└── play.py       ハンズオンの入口。設定を変えて学習させ、学習曲線を重ねて比べる
 ```
 
 ## 準備
 
-[uv](https://docs.astral.sh/uv/) を使います。Python 3.12 と CPU 版の PyTorch が入ります。
+[uv](https://docs.astral.sh/uv/) を使います。入っていなければ、先に入れてください。
 
 ```bash
-uv sync --group slides
+# macOS と Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+# Windows（PowerShell）
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+リポジトリの中で次を実行すると、Python 3.12 と CPU 版の PyTorch が入ります。
+
+```bash
+uv sync
 ```
 
 ## デモ1: 迷路の Q学習
@@ -85,6 +95,39 @@ advantages = (returns - returns.mean()) / (returns.std() + 1e-8)
 ce = F.cross_entropy(logits, actions, reduction="none")
 loss = (ce * advantages).mean()
 ```
+
+## ハンズオン: 設定を変えて CartPole を学習させる
+
+```bash
+uv run python -m rl_study.cartpole.play
+uv run python -m rl_study.cartpole.play --lr 0.1
+```
+
+学習中は学習曲線がウィンドウで伸びていき、終わると学習後の方策で棒が動きます。
+前に回した設定の曲線も重ねて描くので、値を1つずつ変えて比べてください。
+記録は `runs/` に残ります。1回20秒ほどです。
+
+| オプション | 既定 | 意味 |
+| --- | --- | --- |
+| `--lr` | 0.01 | 学習率 |
+| `--gamma` | 0.99 | 割引率 γ |
+| `--batch` | 8 | 1回の更新に使うエピソード数 |
+| `--no-baseline` | なし | 平均を引かず、G をそのまま重みにする |
+| `--episodes` | 600 | 学習に使うエピソード数 |
+| `--seed` | 0 | 乱数の種 |
+| `--clear` | なし | 重ねて描く過去の実行を消してから始める |
+
+seed 0〜2 で600エピソードずつ回すと、次のようになりました。
+「解けた」は、更新の区切りで見た直近20回の平均が475ステップに届いたことを指します。
+
+| 設定 | 解けたエピソード | 最後の20回の平均ステップ数 |
+| --- | --- | --- |
+| 既定 | 328、336、416 | 477、421、461 |
+| `--lr 0.1` | 解けない | 143、212、261 |
+| `--lr 0.001` | 解けない | 51、56、57 |
+| `--gamma 0.9` | 552、344、解けない | 465、138、314 |
+| `--batch 32` | 解けない | 129、182、201 |
+| `--no-baseline` | 352、456、536 | 460、209、489 |
 
 ## スライドを作り直す
 
