@@ -4,7 +4,6 @@ version = "0.1.0"
 description = "社内勉強会: 強化学習の基礎 (Q学習と方策勾配) のデモ"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-    "gymnasium[classic-control]>=1.2.0",
     "matplotlib>=3.10.0",
     "numpy>=2.2.0",
     "torch>=2.8.0",
@@ -46,7 +45,7 @@ ignore = [
 typeCheckingMode = "strict"
 pythonVersion = "3.12"
 include = ["rl_study", "slides"]
-# matplotlib の **kwargs, torch の manual_seed, gymnasium の make は引数や戻りの型が未注釈で, 呼び出し側では直せない
+# matplotlib の **kwargs, torch の manual_seed は引数や戻りの型が未注釈で, 呼び出し側では直せない
 reportUnknownMemberType = "none"
 
 [tool.ty.rules]
