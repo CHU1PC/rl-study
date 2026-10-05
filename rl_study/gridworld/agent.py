@@ -9,10 +9,22 @@ type QTable = npt.NDArray[np.float64]
 
 
 @dataclass(frozen=True, slots=True)
+class Move:
+    cell: Cell = field()  # 動く前のマス
+    action: int = field()  # 選んだ行動 (MOVES の添字)
+    next_cell: Cell = field()
+    reward: float = field()
+    done: bool = field()
+    target: float = field()  # 更新に使った目標 y
+    value: float = field()  # 更新後の Q(cell, action)
+
+
+@dataclass(frozen=True, slots=True)
 class Episode:
     q: QTable = field()  # このエピソードを終えた時点の Q 表. shape (rows, cols, 4)
     path: list[Cell] = field()
     reward: float = field()
+    moves: list[Move] = field()  # 1 手ごとの記録. デモで 1 手ずつ再生するのに使う
 
 
 def choose_action(q: QTable, cell: Cell, epsilon: float, rng: np.random.Generator) -> int:
@@ -65,6 +77,7 @@ def q_learning(
     for _ in range(episodes):
         cell = env.find("S")
         path = [cell]
+        moves: list[Move] = []
         total = 0.0
         for _ in range(max_steps):
             action = choose_action(q, cell, epsilon, rng)
@@ -72,10 +85,11 @@ def q_learning(
             # 1 歩先の自分の予測を「正解ラベル」にして, 今の予測をそちらへ α だけ寄せる.
             target = step.reward + (0.0 if step.done else gamma * q[step.next_cell].max())
             q[cell][action] += alpha * (target - q[cell][action])
+            moves.append(Move(cell, action, step.next_cell, step.reward, step.done, target, float(q[cell][action])))
             cell = step.next_cell
             path.append(cell)
             total += step.reward
             if step.done:
                 break
-        history.append(Episode(q.copy(), path, total))
+        history.append(Episode(q.copy(), path, total, moves))
     return history
