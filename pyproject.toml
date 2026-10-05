@@ -10,11 +10,7 @@ dependencies = [
 ]
 
 [dependency-groups]
-slides = [
-    "python-pptx>=1.0.2",
-]
 dev = [
-    "lxml-stubs>=0.5.1",
     "pyright>=1.1.400",
     "ruff>=0.14.0",
     "ty>=0.0.80",
@@ -44,7 +40,7 @@ ignore = [
 [tool.pyright]
 typeCheckingMode = "strict"
 pythonVersion = "3.12"
-include = ["rl_study", "slides"]
+include = ["rl_study"]
 # matplotlib の **kwargs, torch の manual_seed は引数や戻りの型が未注釈で, 呼び出し側では直せない
 reportUnknownMemberType = "none"
 
